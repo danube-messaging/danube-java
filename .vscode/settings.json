@@ -1,0 +1,7 @@
+{
+  "java.jdt.ls.java.home": "/home/rdan/.sdkman/candidates/java/21-tem",
+  "java.import.maven.enabled": true,
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "maven.executable.preferMavenWrapper": false,
+  "java.compile.nullAnalysis.mode": "disabled"
+}
