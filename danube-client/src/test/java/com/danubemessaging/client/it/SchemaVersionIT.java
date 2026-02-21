@@ -9,8 +9,8 @@ import com.danubemessaging.client.model.StreamMessage;
 import com.danubemessaging.client.schema.SchemaType;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static com.danubemessaging.client.it.TestHelpers.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,124 +20,130 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SchemaVersionIT {
 
-    @Test
-    void producerPinToVersion() throws Exception {
-        DanubeClient client = newClient();
-        String topic = uniqueTopic("/default/pin_version");
-        SchemaRegistryClient schemaClient = client.newSchemaRegistry();
+        @Test
+        void producerPinToVersion() throws Exception {
+                DanubeClient client = newClient();
+                String topic = uniqueTopic("/default/pin_version");
+                SchemaRegistryClient schemaClient = client.newSchemaRegistry();
 
-        String subject = uniqueTopic("version-pin-java");
+                String subject = uniqueTopic("version-pin-java");
 
-        // Register V1
-        String schemaV1 = """
-                {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}""";
-        schemaClient.registerSchema(
-                schemaClient.newRegistration()
-                        .withSubject(subject)
-                        .withSchemaType(SchemaType.JSON_SCHEMA)
-                        .withSchemaDefinition(schemaV1.getBytes()));
+                // Register V1
+                String schemaV1 = """
+                                {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}""";
+                schemaClient.registerSchema(
+                                schemaClient.newRegistration()
+                                                .withSubject(subject)
+                                                .withSchemaType(SchemaType.JSON_SCHEMA)
+                                                .withSchemaDefinition(schemaV1.getBytes()));
 
-        // Register V2
-        String schemaV2 = """
-                {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}}, "required": ["id"]}""";
-        schemaClient.registerSchema(
-                schemaClient.newRegistration()
-                        .withSubject(subject)
-                        .withSchemaType(SchemaType.JSON_SCHEMA)
-                        .withSchemaDefinition(schemaV2.getBytes()));
+                // Register V2
+                String schemaV2 = """
+                                {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}}, "required": ["id"]}""";
+                schemaClient.registerSchema(
+                                schemaClient.newRegistration()
+                                                .withSubject(subject)
+                                                .withSchemaType(SchemaType.JSON_SCHEMA)
+                                                .withSchemaDefinition(schemaV2.getBytes()));
 
-        // Producer pinned to V1
-        Producer producer = client.newProducer()
-                .withTopic(topic)
-                .withName("producer_v1_pinned")
-                .withSchemaPinnedVersion(subject, 1)
-                .build();
-        producer.create();
+                // Producer pinned to V1
+                Producer producer = client.newProducer()
+                                .withTopic(topic)
+                                .withName("producer_v1_pinned")
+                                .withSchemaPinnedVersion(subject, 1)
+                                .build();
+                producer.create();
 
-        // Consumer
-        Consumer consumer = client.newConsumer()
-                .withTopic(topic)
-                .withConsumerName("consumer_version")
-                .withSubscription("sub_version")
-                .withSubscriptionType(SubType.EXCLUSIVE)
-                .build();
-        consumer.subscribe();
+                // Consumer
+                Consumer consumer = client.newConsumer()
+                                .withTopic(topic)
+                                .withConsumerName("consumer_version")
+                                .withSubscription("sub_version")
+                                .withSubscriptionType(SubType.EXCLUSIVE)
+                                .build();
+                consumer.subscribe();
 
-        try {
-            var publisher = consumer.receive();
-            Thread.sleep(200);
+                try {
+                        // Attach collector BEFORE sending
+                        var collector = new TestHelpers.MessageCollector(1);
+                        consumer.receive().subscribe(collector);
+                        Thread.sleep(200);
 
-            producer.send("{\"id\": 123}".getBytes(), Map.of());
+                        producer.send("{\"id\": 123}".getBytes(), Map.of());
 
-            StreamMessage msg = receiveOne(publisher, Duration.ofSeconds(5));
+                        assertTrue(collector.latch.await(5, TimeUnit.SECONDS), "Timeout waiting for message");
+                        StreamMessage msg = collector.messages.getFirst();
 
-            assertNotNull(msg.schemaVersion(), "expected schema_version to be set");
-            assertEquals(1, msg.schemaVersion(), "expected schema_version=1");
+                        assertNotNull(msg.schemaVersion(), "expected schema_version to be set");
+                        assertEquals(1, msg.schemaVersion(), "expected schema_version=1");
 
-            consumer.ack(msg);
-        } finally {
-            consumer.close();
-            client.close();
+                        consumer.ack(msg);
+                } finally {
+                        consumer.close();
+                        client.close();
+                }
         }
-    }
 
-    @Test
-    void producerLatestVersion() throws Exception {
-        DanubeClient client = newClient();
-        String topic = uniqueTopic("/default/latest_version");
-        SchemaRegistryClient schemaClient = client.newSchemaRegistry();
+        @Test
+        void producerLatestVersion() throws Exception {
+                DanubeClient client = newClient();
+                String topic = uniqueTopic("/default/latest_version");
+                SchemaRegistryClient schemaClient = client.newSchemaRegistry();
 
-        String subject = uniqueTopic("latest-version-java");
+                String subject = uniqueTopic("latest-version-java");
 
-        // Register V1
-        String schemaV1 = """
-                {"type": "object", "properties": {"a": {"type": "string"}}}""";
-        schemaClient.registerSchema(
-                schemaClient.newRegistration()
-                        .withSubject(subject)
-                        .withSchemaType(SchemaType.JSON_SCHEMA)
-                        .withSchemaDefinition(schemaV1.getBytes()));
+                // Register V1
+                String schemaV1 = """
+                                {"type": "object", "properties": {"a": {"type": "string"}}}""";
+                schemaClient.registerSchema(
+                                schemaClient.newRegistration()
+                                                .withSubject(subject)
+                                                .withSchemaType(SchemaType.JSON_SCHEMA)
+                                                .withSchemaDefinition(schemaV1.getBytes()));
 
-        // Register V2
-        String schemaV2 = """
-                {"type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "integer"}}}""";
-        schemaClient.registerSchema(
-                schemaClient.newRegistration()
-                        .withSubject(subject)
-                        .withSchemaType(SchemaType.JSON_SCHEMA)
-                        .withSchemaDefinition(schemaV2.getBytes()));
+                // Register V2
+                String schemaV2 = """
+                                {"type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "integer"}}}""";
+                schemaClient.registerSchema(
+                                schemaClient.newRegistration()
+                                                .withSubject(subject)
+                                                .withSchemaType(SchemaType.JSON_SCHEMA)
+                                                .withSchemaDefinition(schemaV2.getBytes()));
 
-        // Producer without version pin (should use latest V2)
-        Producer producer = client.newProducer()
-                .withTopic(topic)
-                .withName("producer_latest")
-                .withSchemaLatest(subject)
-                .build();
-        producer.create();
+                // Producer without version pin (should use latest V2)
+                Producer producer = client.newProducer()
+                                .withTopic(topic)
+                                .withName("producer_latest")
+                                .withSchemaLatest(subject)
+                                .build();
+                producer.create();
 
-        // Consumer
-        Consumer consumer = client.newConsumer()
-                .withTopic(topic)
-                .withConsumerName("consumer_latest")
-                .withSubscription("sub_latest")
-                .build();
-        consumer.subscribe();
+                // Consumer
+                Consumer consumer = client.newConsumer()
+                                .withTopic(topic)
+                                .withConsumerName("consumer_latest")
+                                .withSubscription("sub_latest")
+                                .build();
+                consumer.subscribe();
 
-        try {
-            var publisher = consumer.receive();
-            Thread.sleep(200);
+                try {
+                        // Attach collector BEFORE sending
+                        var collector = new TestHelpers.MessageCollector(1);
+                        consumer.receive().subscribe(collector);
+                        Thread.sleep(200);
 
-            producer.send("{\"a\": \"test\"}".getBytes(), Map.of());
+                        producer.send("{\"a\": \"test\"}".getBytes(), Map.of());
 
-            StreamMessage msg = receiveOne(publisher, Duration.ofSeconds(5));
+                        assertTrue(collector.latch.await(5, TimeUnit.SECONDS), "Timeout waiting for message");
+                        StreamMessage msg = collector.messages.getFirst();
 
-            assertNotNull(msg.schemaVersion(), "expected schema_version to be set");
-            assertEquals(2, msg.schemaVersion(), "expected schema_version=2 (latest)");
+                        assertNotNull(msg.schemaVersion(), "expected schema_version to be set");
+                        assertEquals(2, msg.schemaVersion(), "expected schema_version=2 (latest)");
 
-            consumer.ack(msg);
-        } finally {
-            consumer.close();
-            client.close();
+                        consumer.ack(msg);
+                } finally {
+                        consumer.close();
+                        client.close();
+                }
         }
-    }
 }
