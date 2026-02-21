@@ -13,7 +13,9 @@ public record StreamMessage(
         long publishTime,
         String producerName,
         String subscriptionName,
-        Map<String, String> attributes) {
+        Map<String, String> attributes,
+        Long schemaId,
+        Integer schemaVersion) {
 
     public StreamMessage {
         payload = payload == null ? new byte[0] : payload.clone();
@@ -26,6 +28,9 @@ public record StreamMessage(
     }
 
     public static StreamMessage fromProto(DanubeApi.StreamMessage proto) {
+        Long schemaId = proto.hasSchemaId() ? proto.getSchemaId() : null;
+        Integer schemaVersion = proto.hasSchemaVersion() ? proto.getSchemaVersion() : null;
+
         return new StreamMessage(
                 proto.getRequestId(),
                 MessageId.fromProto(proto.getMsgId()),
@@ -33,6 +38,8 @@ public record StreamMessage(
                 proto.getPublishTime(),
                 proto.getProducerName(),
                 proto.getSubscriptionName(),
-                proto.getAttributesMap());
+                proto.getAttributesMap(),
+                schemaId,
+                schemaVersion);
     }
 }

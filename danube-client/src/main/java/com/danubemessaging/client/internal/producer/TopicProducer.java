@@ -74,13 +74,18 @@ public final class TopicProducer {
         var stub = ProducerServiceGrpc.newBlockingStub(connection.grpcChannel());
         stub = stub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata()));
 
-        DanubeApi.ProducerRequest request = DanubeApi.ProducerRequest.newBuilder()
+        DanubeApi.ProducerRequest.Builder requestBuilder = DanubeApi.ProducerRequest.newBuilder()
                 .setRequestId(requestId.incrementAndGet())
                 .setProducerName(producerName)
                 .setTopicName(topic)
                 .setProducerAccessMode(options.accessMode().toProto())
-                .setDispatchStrategy(options.dispatchStrategy().toProto())
-                .build();
+                .setDispatchStrategy(options.dispatchStrategy().toProto());
+
+        if (options.schemaReference() != null) {
+            requestBuilder.setSchemaRef(options.schemaReference().toProto());
+        }
+
+        DanubeApi.ProducerRequest request = requestBuilder.build();
 
         try {
             DanubeApi.ProducerResponse response = stub.createProducer(request);

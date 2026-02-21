@@ -57,6 +57,10 @@ public final class DanubeClient implements AutoCloseable {
         return new ConsumerBuilder(this);
     }
 
+    public SchemaRegistryClient newSchemaRegistry() {
+        return new SchemaRegistryClient(serviceUri, connectionManager, authService, ioExecutor);
+    }
+
     public CompletableFuture<LookupResult> lookupTopicAsync(String topic) {
         return CompletableFuture.supplyAsync(() -> lookupService.lookupTopic(serviceUri, topic), ioExecutor);
     }

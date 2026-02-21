@@ -270,13 +270,13 @@ Use this section as the live checklist during implementation.
 - [x] Phase 1: Core client foundation complete
 - [x] Phase 2: Producer implementation complete (integration tests deferred)
 - [x] Phase 3: Consumer implementation complete (integration tests deferred)
-- [ ] Phase 4: Health check + hardening complete
-- [ ] Phase 5: Schema registry + schema refs complete
-- [ ] Phase 6: Docs/examples/release prep complete
+- [x] Phase 4: Health check + hardening complete
+- [x] Phase 5: Schema registry + schema refs complete
+- [x] Phase 6: Docs/examples/release prep complete
 
 ### Current status
-- **Overall:** Phases 2 and 3 implementation complete, currently implementing Phase 4 (Health check + hardening)
-- **Next immediate step:** Complete producer/consumer health-check lifecycle behavior and reconnect edge-case handling.
+- **Overall:** Phases 4, 5, and 6 implementation complete.
+- **Next immediate step:** Execute deferred integration test matrix for resilience + schema parity.
 
 ### Validation note
 - Integration tests (producer/consumer parity with Go/Rust) are intentionally deferred and will be implemented together in the dedicated integration-test pass.
