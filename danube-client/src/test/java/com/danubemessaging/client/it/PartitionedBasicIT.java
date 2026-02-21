@@ -7,11 +7,10 @@ import com.danubemessaging.client.SubType;
 import com.danubemessaging.client.model.StreamMessage;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static com.danubemessaging.client.it.TestHelpers.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class PartitionedBasicIT {
 
-    private void runPartitionedBasic(String topicPrefix, SubType subType) {
+    private void runPartitionedBasic(String topicPrefix, SubType subType) throws Exception {
         DanubeClient client = newClient();
         String topic = uniqueTopic(topicPrefix);
         int partitions = 3;
@@ -43,21 +42,25 @@ class PartitionedBasicIT {
         consumer.subscribe();
 
         try {
-            var publisher = consumer.receive();
+            String[] expected = { "Hello Danube 1", "Hello Danube 2", "Hello Danube 3" };
+
+            // Attach collector BEFORE sending
+            var collector = new TestHelpers.MessageCollector(expected.length);
+            consumer.receive().subscribe(collector);
 
             Thread.sleep(300);
 
-            String[] expected = {"Hello Danube 1", "Hello Danube 2", "Hello Danube 3"};
             for (String body : expected) {
                 producer.send(body.getBytes(), Map.of());
             }
 
-            List<StreamMessage> messages = receiveMessages(publisher, expected.length, Duration.ofSeconds(10));
+            assertTrue(collector.latch.await(10, TimeUnit.SECONDS),
+                    "Timeout: received " + collector.messages.size() + "/" + expected.length);
 
             // Verify all payloads received
             Set<String> received = new HashSet<>();
             Set<String> partsSeen = new HashSet<>();
-            for (StreamMessage msg : messages) {
+            for (StreamMessage msg : collector.messages) {
                 received.add(new String(msg.payload()));
                 partsSeen.add(msg.messageId().topicName());
                 consumer.ack(msg);
@@ -72,9 +75,6 @@ class PartitionedBasicIT {
                 String partName = topic + "-part-" + i;
                 assertTrue(partsSeen.contains(partName), "missing partition: " + partName);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            fail("Interrupted");
         } finally {
             consumer.close();
             client.close();
@@ -82,12 +82,12 @@ class PartitionedBasicIT {
     }
 
     @Test
-    void partitionedBasicExclusive() {
+    void partitionedBasicExclusive() throws Exception {
         runPartitionedBasic("/default/part_basic_excl", SubType.EXCLUSIVE);
     }
 
     @Test
-    void partitionedBasicShared() {
+    void partitionedBasicShared() throws Exception {
         runPartitionedBasic("/default/part_basic_shared", SubType.SHARED);
     }
 }

@@ -7,8 +7,8 @@ import com.danubemessaging.client.SubType;
 import com.danubemessaging.client.model.StreamMessage;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static com.danubemessaging.client.it.TestHelpers.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SubscriptionBasicIT {
 
-    private void runBasicSubscription(String topicPrefix, SubType subType) {
+    private void runBasicSubscription(String topicPrefix, SubType subType) throws Exception {
         DanubeClient client = newClient();
         String topic = uniqueTopic(topicPrefix);
 
@@ -38,21 +38,22 @@ class SubscriptionBasicIT {
         consumer.subscribe();
 
         try {
-            var publisher = consumer.receive();
+            // Attach subscriber BEFORE sending so the receive stream is ready
+            var collector = new TestHelpers.MessageCollector(1);
+            consumer.receive().subscribe(collector);
 
             Thread.sleep(300);
 
             byte[] payload = "Hello Danube".getBytes();
             producer.send(payload, Map.of());
 
-            StreamMessage msg = receiveOne(publisher, Duration.ofSeconds(10));
+            assertTrue(collector.latch.await(10, TimeUnit.SECONDS),
+                    "Timeout waiting for message");
 
+            StreamMessage msg = collector.messages.getFirst();
             assertEquals("Hello Danube", new String(msg.payload()));
 
             consumer.ack(msg);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            fail("Interrupted");
         } finally {
             consumer.close();
             client.close();
@@ -60,12 +61,12 @@ class SubscriptionBasicIT {
     }
 
     @Test
-    void basicSubscriptionShared() {
+    void basicSubscriptionShared() throws Exception {
         runBasicSubscription("/default/sub_basic_shared", SubType.SHARED);
     }
 
     @Test
-    void basicSubscriptionExclusive() {
+    void basicSubscriptionExclusive() throws Exception {
         runBasicSubscription("/default/sub_basic_exclusive", SubType.EXCLUSIVE);
     }
 }

@@ -8,7 +8,6 @@ import com.danubemessaging.client.SubType;
 import com.danubemessaging.client.model.StreamMessage;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -51,20 +50,12 @@ class ReliableDispatchIT {
             Arrays.fill(blobData, (byte) 'D');
             int messageCount = 20;
 
-            var publisher = consumer.receive();
-
-            Thread.sleep(400);
-
-            for (int i = 0; i < messageCount; i++) {
-                producer.send(blobData, Map.of());
-            }
-
-            // Receive and ack inline
+            // Attach subscriber BEFORE sending so the receive stream is ready
             AtomicInteger count = new AtomicInteger();
             AtomicReference<Throwable> error = new AtomicReference<>();
             CountDownLatch done = new CountDownLatch(1);
 
-            publisher.subscribe(new TestHelpers.MessageCollector(messageCount) {
+            consumer.receive().subscribe(new TestHelpers.MessageCollector(messageCount) {
                 @Override
                 public void onNext(StreamMessage item) {
                     try {
@@ -80,6 +71,12 @@ class ReliableDispatchIT {
                     }
                 }
             });
+
+            Thread.sleep(400);
+
+            for (int i = 0; i < messageCount; i++) {
+                producer.send(blobData, Map.of());
+            }
 
             assertTrue(done.await(15, TimeUnit.SECONDS),
                     "Timeout: received " + count.get() + "/" + messageCount);

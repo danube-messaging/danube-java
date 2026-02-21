@@ -7,7 +7,6 @@ import com.danubemessaging.client.SubType;
 import com.danubemessaging.client.model.StreamMessage;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,7 +37,8 @@ class FanoutExclusiveIT {
                 .build();
         producer.create();
 
-        record ConsumerEntry(String name, Consumer consumer, TestHelpers.MessageCollector collector) {}
+        record ConsumerEntry(String name, Consumer consumer, TestHelpers.MessageCollector collector) {
+        }
 
         List<ConsumerEntry> consumers = new CopyOnWriteArrayList<>();
         for (int i = 0; i < 3; i++) {
