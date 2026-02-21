@@ -70,10 +70,25 @@ public final class LookupService {
         LookupResult result = lookupTopic(address, topic);
         return switch (result.responseType()) {
             case REDIRECT, CONNECT ->
-                    new BrokerAddress(result.connectUrl(), result.brokerUrl(), result.proxy());
+                new BrokerAddress(result.connectUrl(), result.brokerUrl(), result.proxy());
             case FAILED -> throw new DanubeClientException(
                     "Topic lookup failed: topic may not exist or cluster is unavailable");
             case UNKNOWN -> throw new DanubeClientException("Unknown lookup response type");
         };
+    }
+
+    /**
+     * Attempts topic lookup, silently falling back to using the service URI as
+     * the broker address if lookup fails (e.g. topic does not exist yet).
+     * Matches the Go client's {@code lookupNewBroker} pattern where lookup
+     * errors are swallowed so that the producer/consumer can still connect
+     * to the broker and let the RPC auto-create the topic.
+     */
+    public BrokerAddress tryLookup(URI serviceUri, String topic) {
+        try {
+            return handleLookup(serviceUri, topic);
+        } catch (RuntimeException ignored) {
+            return new BrokerAddress(serviceUri, serviceUri, false);
+        }
     }
 }

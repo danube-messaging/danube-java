@@ -14,6 +14,7 @@ import danube.DanubeApi;
 import io.grpc.Metadata;
 import io.grpc.stub.MetadataUtils;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -42,6 +43,8 @@ public final class TopicConsumer {
 
     private volatile BrokerAddress brokerAddress;
     private volatile long consumerId;
+    private final AtomicBoolean stopSignal = new AtomicBoolean(false);
+    private volatile Thread healthCheckThread;
 
     public TopicConsumer(
             URI serviceUri,
@@ -71,7 +74,27 @@ public final class TopicConsumer {
             return consumerId;
         }
 
-        brokerAddress = lookupService.handleLookup(serviceUri, topic);
+        brokerAddress = lookupService.tryLookup(serviceUri, topic);
+        int attempts = 0;
+
+        while (true) {
+            try {
+                return trySubscribe();
+            } catch (RuntimeException error) {
+                if (!retryManager.isRetryable(error)) {
+                    throw error;
+                }
+                attempts++;
+                if (attempts > retryManager.maxRetries()) {
+                    throw error;
+                }
+                brokerAddress = lookupService.tryLookup(serviceUri, topic);
+                sleepBackoff(retryManager.calculateBackoff(attempts - 1));
+            }
+        }
+    }
+
+    private long trySubscribe() {
         var connection = connectionManager.getConnection(brokerAddress.brokerUrl(), brokerAddress.connectUrl());
 
         var stub = ConsumerServiceGrpc.newBlockingStub(connection.grpcChannel())
@@ -88,6 +111,7 @@ public final class TopicConsumer {
         try {
             DanubeApi.ConsumerResponse response = stub.subscribe(request);
             consumerId = response.getConsumerId();
+            startBackgroundHealthCheck();
             lifecycleState.set(LifecycleState.SUBSCRIBED);
             notifySubscribed(consumerId);
             return consumerId;
@@ -105,7 +129,7 @@ public final class TopicConsumer {
                 subscribe();
             }
 
-            if (healthCheckService.shouldCloseConsumer(serviceUri, brokerAddress, consumerId)) {
+            if (stopSignal.compareAndSet(true, false)) {
                 relookupAndResubscribe();
                 continue;
             }
@@ -207,6 +231,7 @@ public final class TopicConsumer {
 
     public synchronized void relookupAndResubscribe() {
         ensureOpen();
+        cancelHealthCheckTask();
         consumerId = 0;
         subscribe();
     }
@@ -216,6 +241,7 @@ public final class TopicConsumer {
             return;
         }
 
+        cancelHealthCheckTask();
         lifecycleState.set(LifecycleState.CLOSED);
         consumerId = 0;
         notifyClosed();
@@ -256,6 +282,25 @@ public final class TopicConsumer {
             options.eventListener().onConsumerError(topic, consumerName, error, retryable);
         } catch (RuntimeException ignore) {
             // Listener errors must never break client flow.
+        }
+    }
+
+    private void startBackgroundHealthCheck() {
+        cancelHealthCheckTask();
+        stopSignal.set(false);
+        healthCheckThread = healthCheckService.startBackgroundHealthCheck(
+                serviceUri,
+                brokerAddress,
+                DanubeApi.HealthCheckRequest.ClientType.Consumer,
+                consumerId,
+                stopSignal);
+    }
+
+    private void cancelHealthCheckTask() {
+        Thread t = healthCheckThread;
+        if (t != null) {
+            t.interrupt();
+            healthCheckThread = null;
         }
     }
 

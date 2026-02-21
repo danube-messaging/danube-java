@@ -9,12 +9,20 @@ import danube.HealthCheckGrpc;
 import io.grpc.Metadata;
 import io.grpc.stub.MetadataUtils;
 import java.net.URI;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Executes health checks for active producer/consumer instances.
+ *
+ * <p>
+ * Background checks run on virtual threads with a 5-second interval,
+ * matching the Go/Rust client behavior.
  */
 public final class HealthCheckService {
+    private static final Duration HEALTH_CHECK_INTERVAL = Duration.ofSeconds(5);
+
     private final ConnectionManager connectionManager;
     private final AuthService authService;
     private final AtomicLong requestId = new AtomicLong();
@@ -24,20 +32,45 @@ public final class HealthCheckService {
         this.authService = authService;
     }
 
-    public boolean shouldCloseProducer(URI serviceUri, BrokerAddress brokerAddress, long producerId) {
-        return shouldClose(
-                serviceUri,
-                brokerAddress,
-                DanubeApi.HealthCheckRequest.ClientType.Producer,
-                producerId);
+    /**
+     * Starts a background health check on a virtual thread that pings the broker
+     * every 5 seconds. Sets {@code stopSignal} to {@code true} when the broker
+     * responds with CLOSE.
+     *
+     * @return the virtual thread running the health check loop; interrupt it to
+     *         stop.
+     */
+    public Thread startBackgroundHealthCheck(
+            URI serviceUri,
+            BrokerAddress brokerAddress,
+            DanubeApi.HealthCheckRequest.ClientType clientType,
+            long clientId,
+            AtomicBoolean stopSignal) {
+        Thread vt = Thread.ofVirtual()
+                .name("danube-health-check-" + clientType.name().toLowerCase() + "-" + clientId)
+                .start(() -> healthCheckLoop(serviceUri, brokerAddress, clientType, clientId, stopSignal));
+        return vt;
     }
 
-    public boolean shouldCloseConsumer(URI serviceUri, BrokerAddress brokerAddress, long consumerId) {
-        return shouldClose(
-                serviceUri,
-                brokerAddress,
-                DanubeApi.HealthCheckRequest.ClientType.Consumer,
-                consumerId);
+    private void healthCheckLoop(
+            URI serviceUri,
+            BrokerAddress brokerAddress,
+            DanubeApi.HealthCheckRequest.ClientType clientType,
+            long clientId,
+            AtomicBoolean stopSignal) {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                Thread.sleep(HEALTH_CHECK_INTERVAL);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            boolean close = shouldClose(serviceUri, brokerAddress, clientType, clientId);
+            if (close) {
+                stopSignal.set(true);
+                return;
+            }
+        }
     }
 
     private boolean shouldClose(

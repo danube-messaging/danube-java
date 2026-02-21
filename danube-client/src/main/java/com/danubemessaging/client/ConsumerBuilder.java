@@ -13,6 +13,9 @@ public final class ConsumerBuilder {
     private String subscription;
     private SubType subType = SubType.SHARED;
     private ConsumerEventListener eventListener = ConsumerEventListener.noop();
+    private int maxRetries;
+    private long baseBackoffMs;
+    private long maxBackoffMs;
 
     ConsumerBuilder(DanubeClient client) {
         this.client = client;
@@ -47,6 +50,21 @@ public final class ConsumerBuilder {
         return this;
     }
 
+    public ConsumerBuilder withMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+        return this;
+    }
+
+    public ConsumerBuilder withBaseBackoffMs(long baseBackoffMs) {
+        this.baseBackoffMs = baseBackoffMs;
+        return this;
+    }
+
+    public ConsumerBuilder withMaxBackoffMs(long maxBackoffMs) {
+        this.maxBackoffMs = maxBackoffMs;
+        return this;
+    }
+
     public Consumer build() {
         if (topic == null || topic.isBlank()) {
             throw new DanubeClientException("Consumer topic is required");
@@ -60,7 +78,9 @@ public final class ConsumerBuilder {
             throw new DanubeClientException("Subscription is required");
         }
 
-        ConsumerOptions options = new ConsumerOptions(topic, consumerName, subscription, subType, eventListener);
+        ConsumerOptions options = new ConsumerOptions(
+                topic, consumerName, subscription, subType, eventListener,
+                maxRetries, baseBackoffMs, maxBackoffMs);
         return new Consumer(client, options);
     }
 }

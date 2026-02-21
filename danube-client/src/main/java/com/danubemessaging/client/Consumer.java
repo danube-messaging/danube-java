@@ -2,6 +2,7 @@ package com.danubemessaging.client;
 
 import com.danubemessaging.client.errors.DanubeClientException;
 import com.danubemessaging.client.internal.consumer.TopicConsumer;
+import com.danubemessaging.client.internal.retry.RetryManager;
 import com.danubemessaging.client.model.StreamMessage;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +60,10 @@ public final class Consumer implements AutoCloseable {
         List<String> partitions = client.lookupService().topicPartitions(client.serviceUri(), options.topic());
         List<String> targets = partitions.isEmpty() ? List.of(options.topic()) : partitions;
 
+        RetryManager retryManager = hasCustomRetryOptions()
+                ? new RetryManager(options.maxRetries(), options.baseBackoffMs(), options.maxBackoffMs())
+                : client.retryManager();
+
         List<TopicConsumer> createdConsumers = new ArrayList<>(targets.size());
         try {
             for (int i = 0; i < targets.size(); i++) {
@@ -73,7 +78,7 @@ public final class Consumer implements AutoCloseable {
                         client.lookupService(),
                         client.authService(),
                         client.healthCheckService(),
-                        client.retryManager(),
+                        retryManager,
                         options,
                         partitionTopic,
                         partitionConsumerName);
@@ -192,6 +197,10 @@ public final class Consumer implements AutoCloseable {
         } catch (RuntimeException ignore) {
             // Listener errors must never break client flow.
         }
+    }
+
+    private boolean hasCustomRetryOptions() {
+        return options.maxRetries() > 0 || options.baseBackoffMs() > 0 || options.maxBackoffMs() > 0;
     }
 
     private void ensureOpen() {

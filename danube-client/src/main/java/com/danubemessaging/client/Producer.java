@@ -2,6 +2,7 @@ package com.danubemessaging.client;
 
 import com.danubemessaging.client.errors.DanubeClientException;
 import com.danubemessaging.client.internal.producer.TopicProducer;
+import com.danubemessaging.client.internal.retry.RetryManager;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,8 +48,24 @@ public final class Producer {
             return;
         }
 
-        List<String> partitions = client.lookupService().topicPartitions(client.serviceUri(), options.topic());
-        List<String> targets = partitions.isEmpty() ? List.of(options.topic()) : partitions;
+        List<String> targets;
+        if (options.partitions() > 0) {
+            targets = new ArrayList<>(options.partitions());
+            for (int i = 0; i < options.partitions(); i++) {
+                targets.add(options.topic() + "-part-" + i);
+            }
+        } else {
+            List<String> partitions = client.lookupService().topicPartitions(client.serviceUri(), options.topic());
+            targets = partitions.isEmpty() ? List.of(options.topic()) : partitions;
+        }
+
+        SchemaRegistryClient schemaRegistry = options.schemaReference() != null
+                ? client.newSchemaRegistry()
+                : null;
+
+        RetryManager retryManager = hasCustomRetryOptions()
+                ? new RetryManager(options.maxRetries(), options.baseBackoffMs(), options.maxBackoffMs())
+                : client.retryManager();
 
         try {
             for (int i = 0; i < targets.size(); i++) {
@@ -63,6 +80,8 @@ public final class Producer {
                         client.lookupService(),
                         client.authService(),
                         client.healthCheckService(),
+                        schemaRegistry,
+                        retryManager,
                         options,
                         partitionTopic,
                         partitionProducerName);
@@ -167,6 +186,10 @@ public final class Producer {
 
         int index = Math.floorMod(nextPartition.getAndIncrement(), topicProducers.size());
         return topicProducers.get(index);
+    }
+
+    private boolean hasCustomRetryOptions() {
+        return options.maxRetries() > 0 || options.baseBackoffMs() > 0 || options.maxBackoffMs() > 0;
     }
 
     private static void sleepBackoff(Duration backoff) {

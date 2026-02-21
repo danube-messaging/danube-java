@@ -15,6 +15,10 @@ public final class ProducerBuilder {
     private DispatchStrategy dispatchStrategy = DispatchStrategy.NON_RELIABLE;
     private SchemaReference schemaReference;
     private ProducerEventListener eventListener = ProducerEventListener.noop();
+    private int maxRetries;
+    private long baseBackoffMs;
+    private long maxBackoffMs;
+    private int partitions;
 
     ProducerBuilder(DanubeClient client) {
         this.client = client;
@@ -71,6 +75,29 @@ public final class ProducerBuilder {
         return this;
     }
 
+    public ProducerBuilder withMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+        return this;
+    }
+
+    public ProducerBuilder withBaseBackoffMs(long baseBackoffMs) {
+        this.baseBackoffMs = baseBackoffMs;
+        return this;
+    }
+
+    public ProducerBuilder withMaxBackoffMs(long maxBackoffMs) {
+        this.maxBackoffMs = maxBackoffMs;
+        return this;
+    }
+
+    public ProducerBuilder withPartitions(int partitions) {
+        if (partitions < 0) {
+            throw new DanubeClientException("Partitions must be zero or positive");
+        }
+        this.partitions = partitions;
+        return this;
+    }
+
     public Producer build() {
         if (topic == null || topic.isBlank()) {
             throw new DanubeClientException("Producer topic is required");
@@ -86,7 +113,11 @@ public final class ProducerBuilder {
                 accessMode,
                 dispatchStrategy,
                 schemaReference,
-                eventListener);
+                eventListener,
+                maxRetries,
+                baseBackoffMs,
+                maxBackoffMs,
+                partitions);
         return new Producer(client, options);
     }
 }
