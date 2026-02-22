@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.danubemessaging</groupId>
+    <groupId>com.danube-messaging</groupId>
     <artifactId>danube-java</artifactId>
     <version>0.2.0</version>
     <relativePath>../pom.xml</relativePath>

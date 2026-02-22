@@ -14,6 +14,13 @@ import java.util.concurrent.Executors;
 
 /**
  * Builder for {@link DanubeClient}.
+ *
+ * <p>Obtain an instance via {@link DanubeClient#builder()}. Example:
+ * <pre>{@code
+ * DanubeClient client = DanubeClient.builder()
+ *         .serviceUrl("http://127.0.0.1:6650")
+ *         .build();
+ * }</pre>
  */
 public final class DanubeClientBuilder {
     private String serviceUrl;
@@ -26,17 +33,35 @@ public final class DanubeClientBuilder {
     DanubeClientBuilder() {
     }
 
+    /**
+     * Sets the broker service URL. Required.
+     *
+     * @param serviceUrl broker address, e.g. {@code http://127.0.0.1:6650}
+     */
     public DanubeClientBuilder serviceUrl(String serviceUrl) {
         this.serviceUrl = serviceUrl;
         return this;
     }
 
+    /**
+     * Enables TLS using a custom CA certificate (PEM format).
+     * Use {@code https://} in the service URL when TLS is enabled.
+     *
+     * @param caCertPath path to the CA certificate file
+     */
     public DanubeClientBuilder withTls(Path caCertPath) {
         this.useTls = true;
         this.caCertPath = caCertPath;
         return this;
     }
 
+    /**
+     * Enables mutual TLS (mTLS) with a client certificate and private key.
+     *
+     * @param caCertPath    path to the CA certificate file
+     * @param clientCertPath path to the client certificate file
+     * @param clientKeyPath  path to the client private key file
+     */
     public DanubeClientBuilder withMutualTls(Path caCertPath, Path clientCertPath, Path clientKeyPath) {
         this.useTls = true;
         this.caCertPath = caCertPath;
@@ -45,6 +70,14 @@ public final class DanubeClientBuilder {
         return this;
     }
 
+    /**
+     * Enables JWT authentication using an API key.
+     * The client exchanges the API key for a bearer token on first use and caches it
+     * with automatic renewal (default token lifetime: 1 hour).
+     * Calling this method also enables TLS automatically.
+     *
+     * @param apiKey the API key issued by the Danube broker
+     */
     public DanubeClientBuilder withApiKey(String apiKey) {
         this.apiKey = apiKey;
         this.useTls = true;

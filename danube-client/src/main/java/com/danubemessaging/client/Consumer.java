@@ -18,7 +18,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Receives messages from a Danube topic and manages per-partition consumers.
+ * Receives messages from a Danube topic.
+ *
+ * <p>Obtain an instance via {@link DanubeClient#newConsumer()}. Call {@link #subscribe()} to
+ * register with the broker, then call {@link #receive()} to get the message stream.
+ * Acknowledge each message with {@link #ack(StreamMessage)} to advance the subscription cursor.
+ *
+ * <p>This class is thread-safe.
  */
 public final class Consumer implements AutoCloseable {
     private enum LifecycleState {
@@ -42,14 +48,32 @@ public final class Consumer implements AutoCloseable {
         this.options = Objects.requireNonNull(options, "options");
     }
 
+    /**
+     * Returns the options this consumer was built with.
+     *
+     * @return the consumer options
+     */
     public ConsumerOptions options() {
         return options;
     }
 
+    /**
+     * Subscribes to the topic asynchronously.
+     * Equivalent to calling {@link #subscribe()} on the IO executor.
+     *
+     * @return a future that completes when the subscription is established
+     */
     public CompletableFuture<Void> subscribeAsync() {
         return CompletableFuture.runAsync(this::subscribe, client.ioExecutor());
     }
 
+    /**
+     * Subscribes to the topic and starts the background receive loop.
+     * Must be called before {@link #receive()}.
+     * Idempotent — calling twice on an already-subscribed consumer is a no-op.
+     *
+     * @throws com.danubemessaging.client.errors.DanubeClientException if subscription fails
+     */
     public synchronized void subscribe() {
         ensureOpen();
 
@@ -103,14 +127,35 @@ public final class Consumer implements AutoCloseable {
         }
     }
 
+    /**
+     * Returns a {@link Flow.Publisher} that emits incoming {@link StreamMessage} objects.
+     * Subscribe to this publisher with a {@link Flow.Subscriber} to process messages.
+     * The publisher completes exceptionally if the receive loop encounters a fatal error.
+     *
+     * @return the message publisher for this consumer
+     */
     public Flow.Publisher<StreamMessage> receive() {
         return publisher;
     }
 
+    /**
+     * Acknowledges a message asynchronously.
+     *
+     * @param message the message to acknowledge
+     * @return a future that completes when the ack is sent
+     */
     public CompletableFuture<Void> ackAsync(StreamMessage message) {
         return CompletableFuture.runAsync(() -> ack(message), client.ioExecutor());
     }
 
+    /**
+     * Acknowledges a message, advancing the subscription cursor past it.
+     * Must be called for each message to prevent redelivery.
+     *
+     * @param message the message to acknowledge; must not be null
+     * @throws com.danubemessaging.client.errors.DanubeClientException if the message's topic
+     *         has no associated consumer or the consumer is closed
+     */
     public void ack(StreamMessage message) {
         ensureOpen();
 
@@ -128,6 +173,10 @@ public final class Consumer implements AutoCloseable {
         notifyMessageAcked(topicConsumer, message);
     }
 
+    /**
+     * Closes this consumer, cancels the receive loop, and releases all resources.
+     * Idempotent — safe to call multiple times.
+     */
     @Override
     public synchronized void close() {
         if (lifecycleState.get() == LifecycleState.CLOSED) {

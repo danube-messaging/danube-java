@@ -41,30 +41,48 @@ public final class DanubeClient implements AutoCloseable {
         this.ioExecutor = Objects.requireNonNull(ioExecutor, "ioExecutor");
     }
 
+    /** Returns a new builder for constructing a {@link DanubeClient}. */
     public static DanubeClientBuilder builder() {
         return new DanubeClientBuilder();
     }
 
+    /** Returns the broker service URI this client is connected to. */
     public URI serviceUri() {
         return serviceUri;
     }
 
+    /** Returns a new {@link ProducerBuilder} for creating a producer on this client. */
     public ProducerBuilder newProducer() {
         return new ProducerBuilder(this);
     }
 
+    /** Returns a new {@link ConsumerBuilder} for creating a consumer on this client. */
     public ConsumerBuilder newConsumer() {
         return new ConsumerBuilder(this);
     }
 
+    /** Returns a {@link SchemaRegistryClient} connected to this broker's schema registry. */
     public SchemaRegistryClient newSchemaRegistry() {
         return new SchemaRegistryClient(serviceUri, connectionManager, authService, ioExecutor);
     }
 
+    /**
+     * Resolves the broker address for a topic asynchronously.
+     *
+     * @param topic fully-qualified topic name, e.g. {@code /default/my-topic}
+     * @return a future that resolves to the broker {@link LookupResult}
+     */
     public CompletableFuture<LookupResult> lookupTopicAsync(String topic) {
         return CompletableFuture.supplyAsync(() -> lookupService.lookupTopic(serviceUri, topic), ioExecutor);
     }
 
+    /**
+     * Returns the partition topic names for a partitioned topic asynchronously.
+     * Returns an empty list for non-partitioned topics.
+     *
+     * @param topic fully-qualified topic name
+     * @return a future that resolves to the list of partition topic names
+     */
     public CompletableFuture<List<String>> topicPartitionsAsync(String topic) {
         return CompletableFuture.supplyAsync(
                 () -> lookupService.topicPartitions(serviceUri, topic),

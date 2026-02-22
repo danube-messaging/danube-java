@@ -45,7 +45,7 @@ The Java client library for interacting with Danube Messaging Broker platform.
 
 ```xml
 <dependency>
-    <groupId>com.danubemessaging</groupId>
+    <groupId>com.danube-messaging</groupId>
     <artifactId>danube-client</artifactId>
     <version>0.2.0</version>
 </dependency>
@@ -54,7 +54,7 @@ The Java client library for interacting with Danube Messaging Broker platform.
 ### Gradle
 
 ```groovy
-implementation 'com.danubemessaging:danube-client:0.2.0'
+implementation 'com.danube-messaging:danube-client:0.2.0'
 ```
 
 **Requirements:** Java 21 or later.
@@ -225,7 +225,7 @@ docker compose ps
 
 # 3. Run the integration tests from the repository root
 cd ..
-mvn -pl danube-client -Pfailsafe verify
+mvn -pl danube-client -Pintegration-tests verify
 
 # 4. Stop the cluster when done
 cd docker/

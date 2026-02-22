@@ -13,7 +13,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Sends messages to a Danube topic and manages per-partition topic producers.
+ * Sends messages to a Danube topic.
+ *
+ * <p>Obtain an instance via {@link DanubeClient#newProducer()}. Call {@link #create()} before
+ * sending messages. For partitioned topics, partitions are discovered automatically or set
+ * explicitly via {@link ProducerBuilder#withPartitions(int)}.
+ *
+ * <p>This class is thread-safe.
  */
 public final class Producer {
     private enum LifecycleState {
@@ -33,14 +39,28 @@ public final class Producer {
         this.options = Objects.requireNonNull(options, "options");
     }
 
+    /** Returns the options this producer was built with. */
     public ProducerOptions options() {
         return options;
     }
 
+    /**
+     * Registers the producer on the broker asynchronously.
+     * Equivalent to calling {@link #create()} on the IO executor.
+     *
+     * @return a future that completes when the producer is registered
+     */
     public CompletableFuture<Void> createAsync() {
         return CompletableFuture.runAsync(this::create, client.ioExecutor());
     }
 
+    /**
+     * Registers the producer on the broker.
+     * Must be called before {@link #send(byte[], java.util.Map)}.
+     * Idempotent — calling twice on an already-created producer is a no-op.
+     *
+     * @throws com.danubemessaging.client.errors.DanubeClientException if registration fails
+     */
     public synchronized void create() {
         ensureOpen();
 
@@ -102,12 +122,27 @@ public final class Producer {
         lifecycleState.set(LifecycleState.CREATED);
     }
 
+    /**
+     * Sends a message asynchronously.
+     *
+     * @param payload    message body (may be empty but not null)
+     * @param attributes optional key-value metadata attached to the message
+     * @return a future resolving to the broker-assigned message sequence ID
+     */
     public CompletableFuture<Long> sendAsync(byte[] payload, Map<String, String> attributes) {
         byte[] payloadCopy = payload == null ? new byte[0] : payload.clone();
         Map<String, String> attr = attributes == null ? Map.of() : Map.copyOf(attributes);
         return CompletableFuture.supplyAsync(() -> send(payloadCopy, attr), client.ioExecutor());
     }
 
+    /**
+     * Sends a message and blocks until the broker acknowledges receipt.
+     *
+     * @param payload    message body (may be empty but not null)
+     * @param attributes optional key-value metadata; pass {@code Map.of()} for none
+     * @return the broker-assigned message sequence ID
+     * @throws com.danubemessaging.client.errors.DanubeClientException on unrecoverable error
+     */
     public long send(byte[] payload, Map<String, String> attributes) {
         ensureOpen();
 
@@ -150,6 +185,10 @@ public final class Producer {
         }
     }
 
+    /**
+     * Closes this producer and releases all underlying resources.
+     * Idempotent — safe to call multiple times.
+     */
     public synchronized void close() {
         if (lifecycleState.get() == LifecycleState.CLOSED) {
             return;
