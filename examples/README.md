@@ -25,21 +25,23 @@ cd docker
 docker compose up -d
 ```
 
-Build the client jars:
+Build the client jars and fetch all runtime dependencies:
 
 ```bash
 # From the repo root
 mvn -DskipTests package
+mvn -pl danube-client dependency:copy-dependencies -DoutputDirectory=target/dependency -DincludeScope=runtime -q
 ```
 
 ## Running an Example
 
-Set up the classpath with both the client and its proto dependency:
+Build the full classpath (all transitive deps + client jars):
 
 ```bash
-CP=danube-client/target/danube-client-0.2.0.jar:danube-client-proto/target/danube-client-proto-0.2.0.jar
+CP=$(find danube-client/target/dependency -name "*.jar" | tr '\n' ':')$(find danube-client/target danube-client-proto/target -maxdepth 1 -name "*.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | tr '\n' ':')
 
 # Compile
+mkdir -p examples/out
 javac -cp "$CP" examples/SimpleProducerConsumer.java -d examples/out
 
 # Run
