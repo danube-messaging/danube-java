@@ -271,7 +271,3 @@ Generated sources will be in:
 ```bash
 mvn clean verify
 ```
-
-### Release
-
-For Maven Central publishing and signing workflow, see [`RELEASE.md`](./RELEASE.md).
